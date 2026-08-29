@@ -26,11 +26,13 @@
  * may predate the plan and still hold the full tool set.
  */
 
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-  ExtensionContext,
+import {
+  getMarkdownTheme,
+  type ExtensionAPI,
+  type ExtensionCommandContext,
+  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import {
   PLAN_MODE_CHANNEL,
@@ -449,6 +451,15 @@ export default function planMode(pi: ExtensionAPI) {
         details: { status: "ready" as const, plan },
         terminate: true,
       };
+    },
+    renderResult(result, _options, theme) {
+      const plan = (result.details as { plan?: string } | undefined)?.plan;
+      if (!plan) {
+        return new Text(theme.fg("muted", "(no plan content)"), 0, 0);
+      }
+      // A plan is prose to read, not source to inspect. Without a renderer the
+      // TUI falls back to plain text and shows raw Markdown syntax.
+      return new Markdown(plan, 0, 0, getMarkdownTheme());
     },
   });
 

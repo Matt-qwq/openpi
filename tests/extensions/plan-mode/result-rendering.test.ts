@@ -136,9 +136,13 @@ test("plan_ready is registered with a renderer", async () => {
 
 test("headings lose their markers and keep their text", async () => {
   const tool = await loadPlanReady();
-  const out = renderPlan(tool, {
-    plan: "# Migration plan\n\n## Goal\n\n### Steps\n",
-  });
+  const out = renderPlan(
+    tool,
+    {
+      plan: "# Migration plan\n\n## Goal\n\n### Steps\n",
+    },
+    true,
+  );
 
   assert.doesNotMatch(out, /^#\s/m, "no bare ATX heading markers");
   assert.match(out, /Migration plan/);
@@ -148,7 +152,7 @@ test("headings lose their markers and keep their text", async () => {
 
 test("a rich plan renders without throwing and keeps its content", async () => {
   const tool = await loadPlanReady();
-  const out = renderPlan(tool, { plan: RICH_PLAN });
+  const out = renderPlan(tool, { plan: RICH_PLAN }, true);
 
   // Headings and body.
   assert.match(out, /Migration plan/);
@@ -190,7 +194,7 @@ test("a rich plan renders without throwing and keeps its content", async () => {
 
 test("fenced code body is indented while the fence stays visible", async () => {
   const tool = await loadPlanReady();
-  const out = renderPlan(tool, { plan: "```\nhello\n```\n" });
+  const out = renderPlan(tool, { plan: "```\nhello\n```\n" }, true);
 
   // pi-tui colors the fence markers but does not draw a background block, so
   // the backticks remain; the body is what gets indented.
@@ -209,7 +213,11 @@ test("a missing or empty plan falls back to a placeholder", async () => {
 
 test("plain prose with no markup renders as itself", async () => {
   const tool = await loadPlanReady();
-  const out = renderPlan(tool, { plan: "Just a sentence.\nAnd another.\n" });
+  const out = renderPlan(
+    tool,
+    { plan: "Just a sentence.\nAnd another.\n" },
+    true,
+  );
 
   assert.match(out, /Just a sentence\./);
   assert.match(out, /And another\./);
@@ -221,7 +229,7 @@ test("a plan near the documented size cap still renders", async () => {
   const plan = `# Long\n\n${"- item line to pad the plan out\n".repeat(1500)}`;
   assert.ok(plan.length > 40_000, "fixture is meaningfully large");
 
-  const out = renderPlan(tool, { plan });
+  const out = renderPlan(tool, { plan }, true);
   assert.match(out, /Long/);
   assert.match(out, /item line to pad the plan out/);
 });
@@ -230,24 +238,44 @@ test("unusual characters do not break the renderer", async () => {
   const tool = await loadPlanReady();
   // execute() sanitizes before storing, so this is not a path the renderer
   // normally sees. It should degrade, not throw.
-  const out = renderPlan(tool, {
-    plan: "# Ünïcode ✓\n\n- 日本語のテキスト\n\n```\nemoji 🎉 here\n```\n",
-  });
+  const out = renderPlan(
+    tool,
+    {
+      plan: "# Ünïcode ✓\n\n- 日本語のテキスト\n\n```\nemoji 🎉 here\n```\n",
+    },
+    true,
+  );
 
   assert.match(out, /Ünïcode/);
   assert.match(out, /日本語のテキスト/);
   assert.match(out, /emoji 🎉 here/);
 });
 
-test("expanded and collapsed both render the plan body", async () => {
+test("collapsed preview is a single bounded line", async () => {
   const tool = await loadPlanReady();
-  const plan = "# Plan\n\n- one\n- two\n";
-  const collapsed = renderPlan(tool, { plan }, false);
-  const expanded = renderPlan(tool, { plan }, true);
+  const plan = `# Long\n\n${"- item line to pad the plan out\n".repeat(1500)}`;
+  const out = renderPlan(tool, { plan }, false);
 
-  // The renderer is not expansion-gated: the plan is the whole point, and Pi
-  // owns the collapse affordance.
-  assert.match(collapsed, /one/);
-  assert.match(expanded, /one/);
-  assert.equal(collapsed, expanded, "expansion does not change the output");
+  // One summary line with the row count and an expand hint; never the body.
+  assert.match(out, /^Plan ready · \d+ lines · /);
+  assert.match(out, /to expand/);
+  assert.doesNotMatch(
+    out,
+    /item line to pad the plan out/,
+    "body stays hidden",
+  );
+});
+
+test("expanded restores the full plan", async () => {
+  const tool = await loadPlanReady();
+  const plan = `# Long\n\n${"- item line to pad the plan out\n".repeat(1500)}`;
+  const out = renderPlan(tool, { plan }, true);
+
+  assert.match(out, /Long/);
+  assert.match(out, /item line to pad the plan out/, "last body line present");
+  assert.doesNotMatch(
+    out,
+    /^Plan ready · /,
+    "no collapsed summary when expanded",
+  );
 });

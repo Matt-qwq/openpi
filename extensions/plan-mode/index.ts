@@ -28,6 +28,7 @@
 
 import {
   getMarkdownTheme,
+  keyHint,
   type ExtensionAPI,
   type ExtensionCommandContext,
   type ExtensionContext,
@@ -452,10 +453,23 @@ export default function planMode(pi: ExtensionAPI) {
         terminate: true,
       };
     },
-    renderResult(result, _options, theme) {
+    renderResult(result, { expanded }, theme) {
       const plan = (result.details as { plan?: string } | undefined)?.plan;
       if (!plan) {
         return new Text(theme.fg("muted", "(no plan content)"), 0, 0);
+      }
+      if (!expanded) {
+        // Collapsed is one bounded line, so a long plan does not flood the
+        // transcript and Ctrl+O produces a visible change. Pi never truncates
+        // custom renderer output; the renderer owns this contract.
+        return new Text(
+          theme.fg(
+            "muted",
+            `Plan ready · ${plan.split("\n").length} lines · `,
+          ) + keyHint("app.tools.expand", "to expand"),
+          0,
+          0,
+        );
       }
       // A plan is prose to read, not source to inspect. Without a renderer the
       // TUI falls back to plain text and shows raw Markdown syntax.

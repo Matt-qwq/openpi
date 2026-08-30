@@ -453,6 +453,13 @@ export default function planMode(pi: ExtensionAPI) {
         terminate: true,
       };
     },
+    /**
+     * Render a completed plan for the TUI. Collapsed shows one bounded
+     * summary line with a line count and an expand hint; expanded renders
+     * the full plan as Markdown. Pi only reflects the expanded flag — it
+     * never truncates custom renderer output, so this renderer owns the
+     * collapsed/expanded contract.
+     */
     renderResult(result, { expanded }, theme) {
       const plan = (result.details as { plan?: string } | undefined)?.plan;
       if (!plan) {

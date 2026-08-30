@@ -24,6 +24,7 @@ initTheme("dark", false);
 /** Matches the SGR sequences the Markdown component emits. */
 const ANSI = /\u001b\[[0-9;]*m/g;
 
+/** Strip SGR escape sequences the Markdown component emits. */
 function stripAnsi(text: string): string {
   return text.replace(ANSI, "");
 }
@@ -54,6 +55,7 @@ interface PlanTool {
 /** Wide enough that line wrapping does not interfere with assertions. */
 const WIDTH = 200;
 
+/** Load plan-mode under a stub pi API and return the registered plan_ready tool. */
 async function loadPlanReady(): Promise<PlanTool> {
   const { default: planMode } = await import(
     "../../../extensions/plan-mode/index.ts"
@@ -76,6 +78,7 @@ async function loadPlanReady(): Promise<PlanTool> {
   return tool;
 }
 
+/** Render a plan through renderResult, ANSI-stripped, at the test width. */
 function renderPlan(
   tool: PlanTool,
   details: { plan?: string } | null | undefined,

@@ -254,28 +254,109 @@ test("unusual characters do not break the renderer", async () => {
   assert.match(out, /emoji 🎉 here/);
 });
 
-test("collapsed preview is a single bounded line", async () => {
+test("collapsed shows a bounded preview of a long plan", async () => {
   const tool = await loadPlanReady();
-  const plan = `# Long\n\n${"- item line to pad the plan out\n".repeat(1500)}`;
+  const plan = `# Long\n\n${"- item line to pad the plan out\n".repeat(1500)}Final sentinel line`;
   const out = renderPlan(tool, { plan }, false);
 
-  // One summary line with the row count and an expand hint; never the body.
+  // Header line carries line count and expand hint.
   assert.match(out, /^Plan ready · \d+ lines · /);
   assert.match(out, /to expand/);
-  assert.doesNotMatch(
-    out,
-    /item line to pad the plan out/,
-    "body stays hidden",
+  // Preview exposes the first content lines ...
+  assert.match(out, /Long/);
+  assert.match(out, /item line to pad the plan out/);
+  // ... the block is bounded: header + 10 preview rows + '... more' row.
+  const rowCount = out.split("\n").length;
+  assert.ok(rowCount <= 13, `bounded rows, got ${rowCount}`);
+  // ... and content past the cap stays hidden.
+  assert.doesNotMatch(out, /Final sentinel line/, "tail stays hidden");
+});
+
+test("collapsed short plan omits the expand hint", async () => {
+  const tool = await loadPlanReady();
+  const out = renderPlan(tool, { plan: "# Plan\n\n- one\n- two" }, false);
+
+  // No hint and no 'more lines' when the preview already shows everything.
+  assert.match(out, /^Plan ready · 4 lines/);
+  assert.doesNotMatch(out, /to expand/);
+  assert.doesNotMatch(out, /more lines/);
+  assert.match(out, /- one/);
+  assert.match(out, /- two/);
+});
+
+test("collapsed line-count boundaries at the preview cap", async () => {
+  const tool = await loadPlanReady();
+  // One line.
+  const one = renderPlan(tool, { plan: "just a line" }, false);
+  assert.match(one, /^Plan ready · 1 lines/);
+  // Exactly at the cap: no hint, no 'more', all rows shown.
+  const atCap = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join(
+    "\n",
+  );
+  const ten = renderPlan(tool, { plan: atCap }, false);
+  assert.match(ten, /^Plan ready · 10 lines/);
+  assert.doesNotMatch(ten, /to expand/);
+  assert.doesNotMatch(ten, /more lines/);
+  assert.match(ten, /line 10/);
+  // One past the cap: hint and '... (N more lines)' appear; row 11 hidden.
+  const pastCap = Array.from({ length: 11 }, (_, i) => `line ${i + 1}`).join(
+    "\n",
+  );
+  const eleven = renderPlan(tool, { plan: pastCap }, false);
+  assert.match(eleven, /^Plan ready · 11 lines · /);
+  assert.match(eleven, /to expand/);
+  assert.match(eleven, /\.\.\. \(1 more lines\)/);
+  assert.match(eleven, /line 10/);
+  assert.doesNotMatch(eleven, /line 11/);
+});
+
+test("collapsed counts a trailing newline", async () => {
+  const tool = await loadPlanReady();
+  // "a\n".split("\n") → ["a", ""] → the trailing empty element counts.
+  const out = renderPlan(tool, { plan: "a\n" }, false);
+  assert.match(out, /^Plan ready · 2 lines/);
+});
+
+test("collapsed preview wraps unbroken long lines at narrow width", async () => {
+  const tool = await loadPlanReady();
+  const plan = "short start\n" + "x".repeat(400) + "\nend line\n";
+  const component = tool.renderResult?.(
+    { details: { plan } },
+    { expanded: false },
+    THEME,
+  );
+  assert.ok(component, "renderResult must return a component");
+  const lines = stripAnsi(component.render(40).join("\n")).split("\n");
+  assert.ok(
+    lines.every((line) => line.length <= 40),
+    "no overflow beyond width",
+  );
+  assert.match(lines.join("\n"), /^Plan ready · 4 lines/);
+});
+
+test("rendering is stable across repeated calls", async () => {
+  const tool = await loadPlanReady();
+  const plan = "# Plan\n\n- one\n- two\n";
+  assert.equal(
+    renderPlan(tool, { plan }, false),
+    renderPlan(tool, { plan }, false),
+    "collapsed output is deterministic",
+  );
+  assert.equal(
+    renderPlan(tool, { plan }, true),
+    renderPlan(tool, { plan }, true),
+    "expanded output is deterministic",
   );
 });
 
 test("expanded restores the full plan", async () => {
   const tool = await loadPlanReady();
-  const plan = `# Long\n\n${"- item line to pad the plan out\n".repeat(1500)}`;
+  const plan = `# Long\n\n${"- item line to pad the plan out\n".repeat(1500)}Final sentinel line`;
   const out = renderPlan(tool, { plan }, true);
 
   assert.match(out, /Long/);
-  assert.match(out, /item line to pad the plan out/, "last body line present");
+  assert.match(out, /item line to pad the plan out/);
+  assert.match(out, /Final sentinel line/, "tail restorable when expanded");
   assert.doesNotMatch(
     out,
     /^Plan ready · /,

@@ -49,6 +49,8 @@ import { planBashDecision } from "./bash-policy.ts";
 
 export const MAX_READY_PLAN_CHARS = 50_000;
 export const MAX_READY_PLAN_UTF8_BYTES = 48_000;
+/** Preview lines shown in the collapsed plan_ready result. */
+const PLAN_PREVIEW_LINES = 10;
 export const PLAN_MODE_STATE_ENTRY = "my-pi-setup-plan-mode-state";
 
 export type PersistedPlanModeState =
@@ -454,11 +456,11 @@ export default function planMode(pi: ExtensionAPI) {
       };
     },
     /**
-     * Render a completed plan for the TUI. Collapsed shows one bounded
-     * summary line with a line count and an expand hint; expanded renders
-     * the full plan as Markdown. Pi only reflects the expanded flag — it
-     * never truncates custom renderer output, so this renderer owns the
-     * collapsed/expanded contract.
+     * Render a completed plan for the TUI. Collapsed shows the line count
+     * plus a bounded preview (PLAN_PREVIEW_LINES) with an expand hint;
+     * expanded renders the full plan as Markdown. Pi only reflects the
+     * expanded flag — it never truncates custom renderer output, so this
+     * renderer owns the collapsed/expanded contract.
      */
     renderResult(result, { expanded }, theme) {
       const plan = (result.details as { plan?: string } | undefined)?.plan;
@@ -466,17 +468,19 @@ export default function planMode(pi: ExtensionAPI) {
         return new Text(theme.fg("muted", "(no plan content)"), 0, 0);
       }
       if (!expanded) {
-        // Collapsed is one bounded line, so a long plan does not flood the
-        // transcript and Ctrl+O produces a visible change. Pi never truncates
-        // custom renderer output; the renderer owns this contract.
-        return new Text(
-          theme.fg(
-            "muted",
-            `Plan ready · ${plan.split("\n").length} lines · `,
-          ) + keyHint("app.tools.expand", "to expand"),
-          0,
-          0,
-        );
+        const lines = plan.split("\n");
+        let text = theme.fg("muted", `Plan ready · ${lines.length} lines`);
+        if (lines.length > PLAN_PREVIEW_LINES) {
+          text +=
+            theme.fg("muted", " · ") + keyHint("app.tools.expand", "to expand");
+        }
+        for (const line of lines.slice(0, PLAN_PREVIEW_LINES)) {
+          text += `\n${theme.fg("toolOutput", line)}`;
+        }
+        if (lines.length > PLAN_PREVIEW_LINES) {
+          text += `\n${theme.fg("muted", `... (${lines.length - PLAN_PREVIEW_LINES} more lines)`)}`;
+        }
+        return new Text(text, 0, 0);
       }
       // A plan is prose to read, not source to inspect. Without a renderer the
       // TUI falls back to plain text and shows raw Markdown syntax.
